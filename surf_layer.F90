@@ -14,18 +14,18 @@
 
       implicit none
 
-      integer, parameter :: nx=101
+      integer, parameter :: nx=1
 
        real, parameter              :: MAPL_GRAV                      = 9.80665  
 
- real, parameter              :: MAPL_RUNIV                     = 8314.47                        ! J/(Kmole K)
+      real, parameter              :: MAPL_RUNIV                     = 8314.47                        ! J/(Kmole K)
 
 
     ! Physical properties
-   real, parameter              :: MAPL_H2OMW                     =  18.015                        ! kg/Kmole
-   real, parameter              :: MAPL_O3MW                      = 47.9982                        ! kg/Kmole
-   real, parameter              :: MAPL_LATENT_HEAT_VAPORIZATION  = 2.4665E6                       ! J/kg @15C @1atm
-   real, parameter              :: MAPL_ALHL                      = MAPL_LATENT_HEAT_VAPORIZATION  ! J/kg
+      real, parameter              :: MAPL_H2OMW                     =  18.015                        ! kg/Kmole
+      real, parameter              :: MAPL_O3MW                      = 47.9982                        ! kg/Kmole
+      real, parameter              :: MAPL_LATENT_HEAT_VAPORIZATION  = 2.4665E6                       ! J/kg @15C @1atm
+       real, parameter              :: MAPL_ALHL                      = MAPL_LATENT_HEAT_VAPORIZATION  ! J/kg
    real, parameter              :: MAPL_LATENT_HEAT_FUSION        = 3.3370E5                       ! J/kg @1atm
    real, parameter              :: MAPL_ALHF                      = MAPL_LATENT_HEAT_FUSION        ! J/kg
    real, parameter              :: MAPL_LATENT_HEAT_SUBLIMATION   = MAPL_ALHL+MAPL_ALHF            ! J/kg
@@ -52,7 +52,31 @@
 
       real*4  :: Z(nx)
       real*4  :: Phim(nx), Phih(nx)
+      character (len=3),           ::        sfctype      
+     
+      real (kind=dbl_kind), dimension(nx)  :: &
+         Tsf      , & ! surface temperature of ice or ocean
+         potT     , & ! air potential temperature  (K)
+         uatm     , & ! x-direction wind speed (m/s)
+         vatm     , & ! y-direction wind speed (m/s)
+         wind     , & ! wind speed (m/s)
+         zlvl     , & ! atm level height (m)
+         Qa       , & ! specific humidity (kg/kg)
+         rhoa         ! air density (kg/m^3)
+
+      real (kind=dbl_kind), dimension(nx)  :: &
+         strx,        stry, &
+         delt,        delq,          &
+         lhcoef,      shcoef,        &
+         Cdn_atm,                    &
+         Cdn_atm_ratio_n  
+ 
+
       integer i, j, n, iz, irec
+
+
+      sfctype = 'ice'  
+
 
 
       do i=1,nx
@@ -64,6 +88,35 @@
       do i=1,nx
          print*, Z(i), phim(i)
       enddo
+
+      Tsrf(1) = 270.5
+      potT(1) = 260.5
+      uatm(1) = 5.0
+      vatm(1) = 0.0
+      wind(1) = 5.0
+      zlvl(1) = 10.0
+      Qa(1)   = 5.e-5
+      rhoa(1) = 1.4 
+     
+
+
+      do i = 1,nx
+         call icepack_atm_boundary(sfctype,                   &
+                                     Tsf,         potT,          &
+                                     uatm,        vatm,          &
+                                     wind,        zlvl,          &
+                                     Qa,          rhoa,          &
+                                     strx,        stry,          &
+                                     Tref,        Qref,          &
+                                     delt,        delq,          &
+                                     lhcoef,      shcoef,        &
+                                     Cdn_atm,                    &
+                                     Cdn_atm_ratio_n            )
+                                   !  Cdn_atm_ratio_n,            &
+                                   !  Qa_iso,      Qref_iso,      &
+                                   !  uvel,        vvel,          &
+                                   !  Uref,        zlvs)
+      enddo    
        
 contains
 
