@@ -121,6 +121,226 @@
       enddo    
 
 
+      ! ----------------------------------------------------------
+      ! MAPL-style physical constants (copied from the original code)
+      ! ----------------------------------------------------------
+      real, parameter :: MAPL_GRAV   = 9.80665
+      real, parameter :: MAPL_RUNIV  = 8314.47
+      real, parameter :: MAPL_H2OMW  = 18.015
+      real, parameter :: MAPL_AIRMW  = 28.965
+      real, parameter :: MAPL_RDRY   = MAPL_RUNIV / MAPL_AIRMW
+      real, parameter :: MAPL_CPDRY  = 3.5 * MAPL_RDRY
+      real, parameter :: MAPL_RVAP   = MAPL_RUNIV / MAPL_H2OMW
+      real, parameter :: MAPL_CPVAP  = 4.0 * MAPL_RVAP
+      real, parameter :: MAPL_KAPPA  = MAPL_RDRY / MAPL_CPDRY
+      real, parameter :: MAPL_EPSILON= MAPL_H2OMW / MAPL_AIRMW
+      real, parameter :: MAPL_VIREPS = 1.0 / MAPL_EPSILON - 1.0
+      real, parameter :: MAPL_KARMAN = 0.40
+      real, parameter :: MAPL_RGAS   = MAPL_RDRY
+      real, parameter :: MAPL_CP     = MAPL_RGAS / MAPL_KAPPA
+      real, parameter :: MAPL_NUAIR  = 1.533E-5
+      real, parameter :: MAPL_ALHL   = 2.4665E6
+      real, parameter :: MAPL_ALHF   = 3.3370E5
+      real, parameter :: MAPL_ALHS   = MAPL_ALHL + MAPL_ALHF
+
+      ! ----------------------------------------------------------
+      ! Problem size
+      ! ----------------------------------------------------------
+      integer, parameter :: IRUN = 1       ! number of grid points
+
+      ! ----------------------------------------------------------
+      ! Input variables for helfsurface
+      ! ----------------------------------------------------------
+      real :: VUS(IRUN)          ! U-component of surface wind (m/s)
+      real :: VVS(IRUN)          ! V-component of surface wind (m/s)
+      real :: VT1(IRUN)          ! Temperature * P**kappa at atm level (K * P^kappa)
+      real :: VT2(IRUN)          ! Temperature * P**kappa at ground    (K * P^kappa)
+      real :: VSH1(IRUN)         ! Specific humidity at atm level (kg/kg)
+      real :: VSH2(IRUN)         ! Specific humidity at ground    (kg/kg)
+      real :: VP(IRUN)           ! Pressure at atm level (Pa)
+      real :: VPE(IRUN)          ! Surface pressure (Pa)
+      real :: VZ0(IRUN)          ! Surface roughness length (m)
+      real :: LAI_in(IRUN)       ! Leaf Area Index (unused inside helfsurface)
+      real :: VHS(IRUN)          ! Depth of surface layer (m)
+      integer :: IVWATER(IRUN)   ! Surface type flag: 1=ocean, 0=land, 3=special
+      integer :: N               ! Number of internal iterations
+      integer :: CHOOSEZ0        ! Z0 scheme flag (0-4)
+
+      ! ----------------------------------------------------------
+      ! Output variables from helfsurface
+      ! ----------------------------------------------------------
+      real :: VRHO(IRUN)         ! Air density at surface (kg/m^3)
+      real :: VKH(IRUN)          ! Heat transfer coefficient (rho*CT*USTAR)
+      real :: VKM(IRUN)          ! Momentum transfer coefficient (rho*CU*USTAR)
+      real :: VUSTAR(IRUN)       ! Friction velocity (m/s)
+      real :: VXX(IRUN)          ! PHIM(ZETA) dimensionless wind shear
+      real :: VYY(IRUN)          ! PHIH(ZETA) dimensionless temp gradient
+      real :: VCU(IRUN)          ! Momentum transport coefficient
+      real :: VCT(IRUN)          ! Heat transport coefficient
+      real :: VRIB(IRUN)         ! Bulk Richardson number
+      real :: VZETA(IRUN)        ! Monin-Obukhov stability parameter
+      real :: VWS(IRUN)          ! Surface wind speed magnitude (m/s)
+      real :: t2m(IRUN)          ! 2-m temperature (K)
+      real :: q2m(IRUN)          ! 2-m specific humidity (kg/kg)
+      real :: u2m(IRUN)          ! 2-m U-wind (m/s)
+      real :: v2m(IRUN)          ! 2-m V-wind (m/s)
+      real :: t10m(IRUN)         ! 10-m temperature (K)
+      real :: q10m(IRUN)         ! 10-m specific humidity (kg/kg)
+      real :: u10m(IRUN)         ! 10-m U-wind (m/s)
+      real :: v10m(IRUN)         ! 10-m V-wind (m/s)
+      real :: u50m(IRUN)         ! 50-m U-wind (m/s)
+      real :: v50m(IRUN)         ! 50-m V-wind (m/s)
+
+      ! ----------------------------------------------------------
+      ! Physically motivated input values
+      ! ----------------------------------------------------------
+      ! Atmospheric state at ~lowest model level
+      real, parameter :: Tsrf    = 270.5    ! Surface temperature (K)
+      real, parameter :: Tatm    = 260.5    ! Atmospheric temperature at level (K)
+      real, parameter :: Psfc    = 101325.0 ! Surface pressure (Pa)
+      real, parameter :: Patm    = 100000.0 ! Pressure at atm level (Pa)
+      real, parameter :: Qatm    = 5.0e-5   ! Specific humidity at atm level (kg/kg)
+      real, parameter :: Qsfc    = 3.0e-5   ! Specific humidity at surface   (kg/kg)
+      real, parameter :: Uwind   = 5.0      ! U-wind component (m/s)
+      real, parameter :: Vwind   = 0.0      ! V-wind component (m/s)
+      real, parameter :: z0_init = 0.001    ! Roughness length (m) — ice surface
+      real, parameter :: HS_val  = 10.0     ! Surface layer depth (m) — like zlvl
+      real, parameter :: LAI_val = 0.0      ! Leaf area index (ice/ocean => 0)
+
+      ! ----------------------------------------------------------
+      ! Set input arrays
+      ! ----------------------------------------------------------
+      ! Wind components
+      VUS(1) = Uwind                       ! 5 m/s
+      VVS(1) = Vwind                       ! 0 m/s
+
+      ! Temperature * P**kappa (the subroutine internally does TH = T / P^kappa)
+      ! So VT1 = Tatm (absolute T times P^kappa is how helfsurface expects it)
+      ! Looking at the code:  VTH1 = VT1 / VPK  and  VPK = VP**KAPPA
+      ! To get potential temp ~260.5 K:  VT1 = Tatm * Patm**KAPPA
+      VT1(1) = Tatm * (Patm ** MAPL_KAPPA)   ! T1 in "T * P^kappa" units
+      VT2(1) = Tsrf * (Psfc ** MAPL_KAPPA)   ! T2 at ground
+
+      ! Specific humidities
+      VSH1(1) = Qatm                       ! 5.0e-5 kg/kg at atm level
+      VSH2(1) = Qsfc                       ! 3.0e-5 kg/kg at surface
+
+      ! Pressures (Pa) — helfsurface computes P**KAPPA internally
+      VP(1)  = Patm                         ! 100000 Pa (atm level)
+      VPE(1) = Psfc                         ! 101325 Pa (surface)
+
+      ! Roughness length
+      VZ0(1) = z0_init                     ! 0.001 m (typical for sea ice)
+
+      ! Leaf area index (unused for ice/ocean but must be passed)
+      LAI_in(1) = LAI_val                  ! 0.0
+
+      ! Surface type: 1 = ocean water, 0 = land/ice
+      ! Use 0 for ice (IVWATER /= 1 means no ocean Z0 recalculation)
+      IVWATER(1) = 0
+
+      ! Surface layer depth (m) — analogous to zlvl in icepack
+      VHS(1) = HS_val                      ! 10.0 m
+
+      ! Number of helfsurface internal iterations
+      N = 5
+
+      ! Z0 scheme selection:
+      !   0 = L&P Z0 no high-wind limit
+      !   1 = Edson Z0 for mom. & heat, high-wind limit
+      !   2 = L&P Z0, high-wind limit
+      !   3 = Edson Z0 for mom. only, high-wind limit
+      !   4 = wave-model Charnock coefficient
+      CHOOSEZ0 = 0
+
+      ! ----------------------------------------------------------
+      ! Initialize output arrays to zero
+      ! ----------------------------------------------------------
+      VRHO   = 0.0
+      VKH    = 0.0
+      VKM    = 0.0
+      VUSTAR = 0.0
+      VXX    = 0.0
+      VYY    = 0.0
+      VCU    = 0.0
+      VCT    = 0.0
+      VRIB   = 0.0
+      VZETA  = 0.0
+      VWS    = 0.0
+      t2m    = 0.0
+      q2m    = 0.0
+      u2m    = 0.0
+      v2m    = 0.0
+      t10m   = 0.0
+      q10m   = 0.0
+      u10m   = 0.0
+      v10m   = 0.0
+      u50m   = 0.0
+      v50m   = 0.0
+
+      ! ----------------------------------------------------------
+      ! Call helfsurface
+      ! ----------------------------------------------------------
+      call helfsurface( VUS, VVS, VT1, VT2, VSH1, VSH2, VP, VPE,   &
+                         VZ0, LAI_in, IVWATER, VHS, N, IRUN,        &
+                         VRHO, VKH, VKM, VUSTAR, VXX, VYY,          &
+                         VCU, VCT, VRIB, VZETA, VWS,                &
+                         t2m, q2m, u2m, v2m,                        &
+                         t10m, q10m, u10m, v10m,                    &
+                         u50m, v50m,                                &
+                         CHOOSEZ0 )
+      ! Note: optional WMCHARNOCK is omitted (not needed for CHOOSEZ0=0)
+
+      ! ----------------------------------------------------------
+      ! Print results
+      ! ----------------------------------------------------------
+      print *, '========================================'
+      print *, '  helfsurface results (IRUN=1)'
+      print *, '========================================'
+      print *, 'Input:'
+      print *, '  Tsrf (K)        = ', Tsrf
+      print *, '  Tatm (K)        = ', Tatm
+      print *, '  Psfc (Pa)       = ', Psfc
+      print *, '  Patm (Pa)       = ', Patm
+      print *, '  Qatm (kg/kg)    = ', Qatm
+      print *, '  Qsfc (kg/kg)    = ', Qsfc
+      print *, '  U (m/s)         = ', Uwind
+      print *, '  V (m/s)         = ', Vwind
+      print *, '  Z0 (m)          = ', z0_init
+      print *, '  HS (m)          = ', HS_val
+      print *, '  IVWATER         = ', IVWATER(1)
+      print *, '  N (iterations)  = ', N
+      print *, '  CHOOSEZ0        = ', CHOOSEZ0
+      print *, '----------------------------------------'
+      print *, 'Output:'
+      print *, '  RHO   (kg/m^3)  = ', VRHO(1)
+      print *, '  KH    (rho*Ct*u*)= ', VKH(1)
+      print *, '  KM    (rho*Cu*u*)= ', VKM(1)
+      print *, '  USTAR (m/s)     = ', VUSTAR(1)
+      print *, '  CU              = ', VCU(1)
+      print *, '  CT              = ', VCT(1)
+      print *, '  RIB             = ', VRIB(1)
+      print *, '  ZETA            = ', VZETA(1)
+      print *, '  WS   (m/s)      = ', VWS(1)
+      print *, '  XX (PHIM)       = ', VXX(1)
+      print *, '  YY (PHIH)       = ', VYY(1)
+      print *, '----------------------------------------'
+      print *, 'Diagnostics at 2 m:'
+      print *, '  T2m  (K)        = ', t2m(1)
+      print *, '  Q2m  (kg/kg)    = ', q2m(1)
+      print *, '  U2m  (m/s)      = ', u2m(1)
+      print *, '  V2m  (m/s)      = ', v2m(1)
+      print *, 'Diagnostics at 10 m:'
+      print *, '  T10m (K)        = ', t10m(1)
+      print *, '  Q10m (kg/kg)    = ', q10m(1)
+      print *, '  U10m (m/s)      = ', u10m(1)
+      print *, '  V10m (m/s)      = ', v10m(1)
+      print *, 'Diagnostics at 50 m:'
+      print *, '  U50m (m/s)      = ', u50m(1)
+      print *, '  V50m (m/s)      = ', v50m(1)
+      print *, '========================================'
+
+
       stop 
        
 contains
