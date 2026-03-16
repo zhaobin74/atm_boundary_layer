@@ -3,10 +3,11 @@
       program surf_layer 
  
       use icepack_kinds
-      use icepack_parameters, only: c0, c1, c2, c4, c5, c8, c10
-      use icepack_parameters, only: c16, c20, p001, p01, p2, p4, p5, p75, puny
+      use icepack_parameters, only: c0, c1, c2, c4, c5, c8, c10, c180
+      use icepack_parameters, only: c16, c20, p001, p01, p2, p4, p5, p75, pi, puny
       use icepack_parameters, only: senscoef, latncoef
       use icepack_parameters, only: cp_wv, cp_air, iceruf, zref, qqqice, TTTice, qqqocn, TTTocn
+      use icepack_parameters, only: cprho, cp_ocn, Lfresh, Cp, piq, pi2, rad_to_deg
       use icepack_parameters, only: Lsub, Lvap, vonkar, Tffresh, zvir, gravit
       use icepack_parameters, only: pih, dragio, rhoi, rhos, rhow
       use icepack_parameters, only: atmbndy, calc_strair, formdrag
@@ -77,71 +78,6 @@
       integer i, j, n, iz, irec
 
 
-      sfctype = 'ice'  
-
-
-
-      do i=1,nx
-         Z(i) = real(i-1, kind=4)
-      enddo   
-
-      call PHI(Z, Phim, Phih, 1, nx)
-
-      do i=1,nx
-         print*, Z(i), phim(i)
-      enddo
-
-      Tsrf(1) = 270.5
-      potT(1) = 260.5
-      uatm(1) = 5.0
-      vatm(1) = 0.0
-      wind(1) = 5.0
-      zlvl(1) = 10.0
-      Qa(1)   = 5.e-5
-      rhoa(1) = 1.4 
-     
-
-
-      do i = 1,nx
-         call icepack_atm_boundary(sfctype,                   &
-                                     Tsf,         potT,          &
-                                     uatm,        vatm,          &
-                                     wind,        zlvl,          &
-                                     Qa,          rhoa,          &
-                                     strx,        stry,          &
-                                     Tref,        Qref,          &
-                                     delt,        delq,          &
-                                     lhcoef,      shcoef,        &
-                                     Cdn_atm,                    &
-                                     Cdn_atm_ratio_n            )
-                                   !  Cdn_atm_ratio_n,            &
-                                   !  Qa_iso,      Qref_iso,      &
-                                   !  uvel,        vvel,          &
-                                   !  Uref,        zlvs)
-      enddo    
-
-
-      ! ----------------------------------------------------------
-      ! MAPL-style physical constants (copied from the original code)
-      ! ----------------------------------------------------------
-      real, parameter :: MAPL_GRAV   = 9.80665
-      real, parameter :: MAPL_RUNIV  = 8314.47
-      real, parameter :: MAPL_H2OMW  = 18.015
-      real, parameter :: MAPL_AIRMW  = 28.965
-      real, parameter :: MAPL_RDRY   = MAPL_RUNIV / MAPL_AIRMW
-      real, parameter :: MAPL_CPDRY  = 3.5 * MAPL_RDRY
-      real, parameter :: MAPL_RVAP   = MAPL_RUNIV / MAPL_H2OMW
-      real, parameter :: MAPL_CPVAP  = 4.0 * MAPL_RVAP
-      real, parameter :: MAPL_KAPPA  = MAPL_RDRY / MAPL_CPDRY
-      real, parameter :: MAPL_EPSILON= MAPL_H2OMW / MAPL_AIRMW
-      real, parameter :: MAPL_VIREPS = 1.0 / MAPL_EPSILON - 1.0
-      real, parameter :: MAPL_KARMAN = 0.40
-      real, parameter :: MAPL_RGAS   = MAPL_RDRY
-      real, parameter :: MAPL_CP     = MAPL_RGAS / MAPL_KAPPA
-      real, parameter :: MAPL_NUAIR  = 1.533E-5
-      real, parameter :: MAPL_ALHL   = 2.4665E6
-      real, parameter :: MAPL_ALHF   = 3.3370E5
-      real, parameter :: MAPL_ALHS   = MAPL_ALHL + MAPL_ALHF
 
       ! ----------------------------------------------------------
       ! Problem size
@@ -163,7 +99,6 @@
       real :: LAI_in(IRUN)       ! Leaf Area Index (unused inside helfsurface)
       real :: VHS(IRUN)          ! Depth of surface layer (m)
       integer :: IVWATER(IRUN)   ! Surface type flag: 1=ocean, 0=land, 3=special
-      integer :: N               ! Number of internal iterations
       integer :: CHOOSEZ0        ! Z0 scheme flag (0-4)
 
       ! ----------------------------------------------------------
@@ -195,7 +130,7 @@
       ! Physically motivated input values
       ! ----------------------------------------------------------
       ! Atmospheric state at ~lowest model level
-      real, parameter :: Tsrf    = 270.5    ! Surface temperature (K)
+      !real, parameter :: Tsrf    = 270.5    ! Surface temperature (K)
       real, parameter :: Tatm    = 260.5    ! Atmospheric temperature at level (K)
       real, parameter :: Psfc    = 101325.0 ! Surface pressure (Pa)
       real, parameter :: Patm    = 100000.0 ! Pressure at atm level (Pa)
@@ -203,9 +138,50 @@
       real, parameter :: Qsfc    = 3.0e-5   ! Specific humidity at surface   (kg/kg)
       real, parameter :: Uwind   = 5.0      ! U-wind component (m/s)
       real, parameter :: Vwind   = 0.0      ! V-wind component (m/s)
-      real, parameter :: z0_init = 0.001    ! Roughness length (m) — ice surface
+      real, parameter :: z0_init = 5.0e-4    ! Roughness length (m) — ice surface
       real, parameter :: HS_val  = 10.0     ! Surface layer depth (m) — like zlvl
       real, parameter :: LAI_val = 0.0      ! Leaf area index (ice/ocean => 0)
+
+      sfctype = 'ice'
+
+
+      Tsrf(1) = 265.5
+      potT(1) = Tatm
+      uatm(1) = Uwind
+      vatm(1) = Vwind
+      wind(1) = sqrt(uatm(1)**2+vatm(1)**2)
+      zlvl(1) = HS_val
+      Qa(1)   = Qatm
+      rhoa(1) = 1.4
+
+
+      cprho  = cp_ocn*rhow
+      Lfresh = Lsub-Lvap
+      Cp     = 0.5_dbl_kind*gravit*(rhow-rhoi)*rhoi/rhow
+      pih    = p5*pi
+      piq    = p5*p5*pi
+      pi2    = c2*pi
+      rad_to_deg = c180/pi
+
+
+
+      do i = 1,nx
+         call icepack_atm_boundary(sfctype,                         &
+                                     Tsrf(i)-Tffresh,     potT(i),          &
+                                     uatm(i),     vatm(i),          &
+                                     wind(i),     zlvl(i),          &
+                                     Qa(i),       rhoa(i),          &
+                                     strx(i),     stry(i),          &
+                                     Tref(i),     Qref(i),          &
+                                     delt(i),     delq(i),          &
+                                     lhcoef(i),   shcoef(i),        &
+                                     Cdn_atm(i),                    &
+                                     Cdn_atm_ratio_n(i)           )
+                                   !  Cdn_atm_ratio_n,            &
+                                   !  Qa_iso,      Qref_iso,      &
+                                   !  uvel,        vvel,          &
+                                   !  Uref,        zlvs)
+      enddo
 
       ! ----------------------------------------------------------
       ! Set input arrays
@@ -218,16 +194,21 @@
       ! So VT1 = Tatm (absolute T times P^kappa is how helfsurface expects it)
       ! Looking at the code:  VTH1 = VT1 / VPK  and  VPK = VP**KAPPA
       ! To get potential temp ~260.5 K:  VT1 = Tatm * Patm**KAPPA
-      VT1(1) = Tatm * (Patm ** MAPL_KAPPA)   ! T1 in "T * P^kappa" units
-      VT2(1) = Tsrf * (Psfc ** MAPL_KAPPA)   ! T2 at ground
+      VT1(1) = Tatm
+      VT2(1) = Tsrf(1)
 
       ! Specific humidities
       VSH1(1) = Qatm                       ! 5.0e-5 kg/kg at atm level
       VSH2(1) = Qsfc                       ! 3.0e-5 kg/kg at surface
 
       ! Pressures (Pa) — helfsurface computes P**KAPPA internally
-      VP(1)  = Patm                         ! 100000 Pa (atm level)
-      VPE(1) = Psfc                         ! 101325 Pa (surface)
+
+      VHS(1) = HS_val                      ! 10.0 m
+
+      VPE(1) = Psfc*0.01             !  convert to MB
+      VP(1) =  VPE(1) * (1. - (VHS(1)*MAPL_GRAV)/(MAPL_RGAS*(VT1(1)+VT2(1)) ) ) /   &
+                        (1. + (VHS(1)*MAPL_GRAV)/(MAPL_RGAS*(VT1(1)+VT2(1)) ) )
+
 
       ! Roughness length
       VZ0(1) = z0_init                     ! 0.001 m (typical for sea ice)
@@ -237,13 +218,12 @@
 
       ! Surface type: 1 = ocean water, 0 = land/ice
       ! Use 0 for ice (IVWATER /= 1 means no ocean Z0 recalculation)
-      IVWATER(1) = 0
+      IVWATER(1) = 5
 
       ! Surface layer depth (m) — analogous to zlvl in icepack
-      VHS(1) = HS_val                      ! 10.0 m
 
       ! Number of helfsurface internal iterations
-      N = 5
+      N = 6
 
       ! Z0 scheme selection:
       !   0 = L&P Z0 no high-wind limit
@@ -251,7 +231,7 @@
       !   2 = L&P Z0, high-wind limit
       !   3 = Edson Z0 for mom. only, high-wind limit
       !   4 = wave-model Charnock coefficient
-      CHOOSEZ0 = 0
+      CHOOSEZ0 = 3
 
       ! ----------------------------------------------------------
       ! Initialize output arrays to zero
@@ -277,6 +257,7 @@
       v10m   = 0.0
       u50m   = 0.0
       v50m   = 0.0
+
 
       ! ----------------------------------------------------------
       ! Call helfsurface
@@ -718,6 +699,24 @@ contains
       else
          Uref = vmag * rd / rdn
       endif
+
+      print *, '========================================'
+      print *, '  ncar bulk results (IRUN=1)'
+      print *, '========================================'
+      print *, 'Input:'
+      print *, '  Tsrf (K)        = ', Tsfk
+      print *, '  Tatm (K)        = ', potT
+      print *, '  Wind (K)        = ', wind
+      print *, '----------------------------------------'
+      print *, 'Output:'
+      print *, '  KSH    (rho*Ct*u*)= ', shcoef
+      print *, '  KLH    (rho*Ct*u*)= ', lhcoef
+      print *, '  KM    (rho*Cu*u*)= ', tau
+      print *, ' ustar             = ', ustar
+      print *, '----------------------------------------'
+      print *, 'Diagnostics at 2 m:'
+      print *, '  T2m  (K)        = ', Tref
+
 
 
       end subroutine atmo_boundary_layer
@@ -1350,8 +1349,7 @@ contains
       elseif(trim(qty) == 'scalar') then
          psi_unstable = psi_scalar_unstable(hol)
       else
-         call icepack_warnings_add(subname//' incorrect qty: ' // qty)
-         call icepack_warnings_setabort(.true.,__FILE__,__LINE__)
+         print*,'unknown qty'
       endif
 
       psi = psi_stable*stable + (c1 - stable)*psi_unstable
